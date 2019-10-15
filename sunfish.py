@@ -6,6 +6,13 @@ import re, sys, time
 from itertools import count
 from collections import namedtuple
 
+import sys
+
+# insert at 1, 0 is the script path (or '' in REPL)
+sys.path.insert(1, '/home/lawrence/PycharmProjects/machine_learning_stanford_summer')
+
+import run
+
 ###############################################################################
 # Piece-Square tables. Tune these to change sunfish's behaviour
 ###############################################################################
@@ -201,28 +208,66 @@ class Position(namedtuple('Position', 'board score wc bc ep kp')):
         # We rotate the returned position, so it's ready for the next player
         return Position(board, score, wc, bc, ep, kp).rotate()
 
+
+
+    def FEN_to_list(self, FEN):
+
+
+        FEN = FEN[21:99]
+        list = [[[0 for k in range(8)] for j in range(8)] for i in range(12)]
+        k = 0
+        j = 0
+        for i in FEN:
+            if i == "\n":
+                k = 0
+                j += 1
+            elif i == ".":
+                k += 1
+            elif i == " ":
+                pass
+            else:
+                i = i.lower() if i.isupper else i.upper()
+                list[run.str_to_int(i)][j][k] = 1
+                k += 1
+        return list
+
     def value(self, move):
+
+        import torch
+        save_path = "model.pth"
+        net = run.Net()
+        net.load_state_dict(torch.load(save_path))
         i, j = move
-        p, q = self.board[i], self.board[j]
-        # Actual move
-        score = pst[p][j] - pst[p][i]
-        # Capture
-        if q.islower():
-            score += pst[q.upper()][119-j]
-        # Castling check detection
-        if abs(j-self.kp) < 2:
-            score += pst['K'][119-j]
-        # Castling
-        if p == 'K' and abs(i-j) == 2:
-            score += pst['R'][(i+j)//2]
-            score -= pst['R'][A1 if j < i else H1]
-        # Special pawn stuff
-        if p == 'P':
-            if A8 <= j <= H8:
-                score += pst['Q'][j] - pst['P'][j]
-            if j == self.ep:
-                score += pst['P'][119-(j+S)]
-        return score
+
+        # p, q = self.board[i], self.board[j]
+        # # Actual move
+        # score = pst[p][j] - pst[p][i]
+        # # Capture
+        # if q.islower():
+        #     score += pst[q.upper()][119-j]
+        # # Castling check detection
+        # if abs(j-self.kp) < 2:
+        #     score += pst['K'][119-j]
+        # # Castling
+        # if p == 'K' and abs(i-j) == 2:
+        #     score += pst['R'][(i+j)//2]
+        #     score -= pst['R'][A1 if j < i else H1]
+        # # Special pawn stuff
+        # if p == 'P':
+        #     if A8 <= j <= H8:
+        #         score += pst['Q'][j] - pst['P'][j]
+        #     if j == self.ep:
+        #         score += pst['P'][119-(j+S)]
+        # return score
+
+        board_old = self.FEN_to_list(self.board)
+        board_new = self.board
+        board_new = board_new[:j] + board_new[i] + board_new[j + 1:]
+        board_new = board_new[:i] + "." + board_new[i + 1:]
+        board_new = self.FEN_to_list(board_new)
+        return net(torch.FloatTensor([board_new])).data.numpy()[0][0] - net(torch.FloatTensor([board_old])).data.numpy()[0][0]
+
+
 
 ###############################################################################
 # Search logic
@@ -412,6 +457,7 @@ def main():
             match = re.match('([a-h][1-8])'*2, input('Your move: '))
             if match:
                 move = parse(match.group(1)), parse(match.group(2))
+                print()
             else:
                 # Inform the user when invalid input (e.g. "help") is entered
                 print("Please enter a move like g8f6")
